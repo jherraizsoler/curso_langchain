@@ -1,1 +1,23 @@
+# --- Entornos Virtuales ---
 /venv
+.venv/
+env/
+ENV/
+
+# --- Variables de Entorno (SEGURIDAD) ---
+# Aquí es donde guardas tus llaves de ChatGPT/Gemini
+.env
+
+# --- Archivos de Python (Basura) ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Archivos de Sistema ---
+.DS_Store
+Thumbs.db
+
+# --- Distribución / Paquetes ---
+dist/
+build/
+*.egg-info/
