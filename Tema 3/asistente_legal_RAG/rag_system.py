@@ -4,6 +4,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from langchain_classic.retrievers.multi_query import MultiQueryRetriever
+from langchain_classic.retrievers import EnsembleRetriever 
 import  streamlit as st
 from config import *
 from prompts import *
@@ -31,6 +32,12 @@ def initialize_rag_system():
         }
     )
     
+    # Retriever adicional con similarity para comparar
+    similarity_retriever = vector_store.as_retriever(
+        search_type="similarity",
+        search_kwargs= {"k": SEARCH_K}
+    )
+    
     
     # Prompt personalizado para MultiQueryRetriever
     multi_query_prompt = PromptTemplate.from_template(MULTI_QUERY_PROMPT)
@@ -42,6 +49,18 @@ def initialize_rag_system():
         llm=llm_queries,
         prompt=multi_query_prompt
     )
+    
+    # Ensembre Retriever que combinar MMR y Similarity
+    if ENABLE_HYBRID_SEARCH:
+        ensenble_retriever = EnsembleRetriever(
+            retrievers = [mmr_multi_retriever, similarity_retriever],
+            weights=[0.7, 0.3], # Mayor peso a MMR
+            similarity_threshold = SIMILARITY_THRESHOLD
+        )
+        final_retriever = ensenble_retriever
+    else:
+        final_retriever = mmr_multi_retriever
+    
     
     prompt = PromptTemplate.from_template(RAG_TEMPLATE)
     
@@ -64,7 +83,7 @@ def initialize_rag_system():
     
     rag_chain=(
         {
-            "context": mmr_multi_retriever | format_docs,
+            "context": final_retriever | format_docs,
             "question": RunnablePassthrough()
         } 
         | prompt 
@@ -103,9 +122,9 @@ def query_rag(question):
 def get_retriever_info():
     """Obtiene información sobre la configuración del retriever"""
     return {
-        "tipo": f"{SEARCH_TYPE.upper()}",
+        "tipo": f"{SEARCH_TYPE.upper()} + MultiQuery" + (" + Hybrid" if ENABLE_HYBRID_SEARCH else ""),
         "documentos": SEARCH_K,
         "diversidad": MMR_DIVERSITY_LAMBDA,
         "candidatos": MMR_FETCH_K,
-        "umbral": None
+        "umbral": SIMILARITY_THRESHOLD if ENABLE_HYBRID_SEARCH else "N/A"
     }
