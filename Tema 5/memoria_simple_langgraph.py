@@ -1,4 +1,4 @@
-from langgraph.graph import MessagesState, StateGraph, START
+from langgraph.graph import MessagesState, StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage,AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -18,6 +18,7 @@ def chatbot_node(state):
 
 workflow.add_node("chatbot", chatbot_node)
 workflow.add_edge(START, "chatbot")
+workflow.add_edge("chatbot", END)
 
 # Compilar el grafo
 memory = MemorySaver()
