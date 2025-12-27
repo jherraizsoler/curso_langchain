@@ -93,12 +93,12 @@ Usa esta información para personalizar tus respuestas, pero no menciones explí
             
             # Construir contexto con memorias vectoriales
             if vector_memories:
-                context_parts = ["Informacion relevante que recuerdas del usuario:"]
+                context_parts = ["Información relevante que recuerdas del usuario:"]
                 for memory in vector_memories:
                     context_parts.append(f"- {memory}")
                 context = "\n".join(context_parts)
             else:
-                context = "No hay informacion previa relevante disponible."
+                context = "No hay information previa relevante disponible."
 
             # Crear el prompt con el contexto dinamico
             prompt = ChatPromptTemplate.from_messages([
@@ -127,7 +127,7 @@ Usa esta información para personalizar tus respuestas, pero no menciones explí
             if not last_user_message:
                 return {}
             
-            # Solo procesar si no hemos extraido memorias de este mensaje
+            # Solo procesar si no hemos extraído memorias de este mensaje
             if last_extraction != last_user_message.content:
                 self.memory_manager.extract_and_store_memories(last_user_message.content)
                 return {"last_memory_extraction": last_user_message.content}
@@ -159,9 +159,9 @@ Usa esta información para personalizar tus respuestas, pero no menciones explí
         return workflow.compile(checkpointer=checkpointer)
     
     def chat(self, message: str, chat_id: str = "default"):
-        """Envia un mensaje y obtiene respuesta del chatbot."""
+        """Envía un mensaje y obtiene respuesta del chatbot."""
         try:
-            # Configuracion para el thread especifico del chat
+            # Configuración para el thread especifico del chat
             config = {"configurable": {"thread_id": f"user_{self.user_id}_chat_{chat_id}"}}
 
             # Actualizamos el titulo del chat si es necesario
@@ -196,7 +196,7 @@ Usa esta información para personalizar tus respuestas, pero no menciones explí
             }
         
     def get_conversation_history(self, chat_id: str = "default", limit: int = 50):
-        """Obtiene el historial de conversacion usando el estado de LangGraph."""
+        """Obtiene el historial de conversación usando el estado de LangGraph."""
         try:
             config = {"configurable": {"thread_id": f"user_{self.user_id}_chat_{chat_id}"}}
 
@@ -237,31 +237,29 @@ Usa esta información para personalizar tus respuestas, pero no menciones explí
             return False
     
     def delete_chat_from_langgraph(self, chat_id: str) -> bool:
-        """Elimina un chat específico de LangGraph"""
+        """Elimina un chat de la base de datos SQLite de LangGraph del usuario."""
+        conn = None
         try:
             thread_id = f"user_{self.user_id}_chat_{chat_id}"
+            # Usamos la ruta que ya definiste en el __init__
+            db_path = self.langgraph_db_path 
             
-            # Crear un estado vacío para "limpiar" el thread
-            config = {"configurable": {"thread_id": thread_id}}
+            # Conectar específicamente a la DB del usuario
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
             
-            # Obtener el estado actual para verificar si existe
-            try:
-                current_state = self.app.get_state(config)
-                if not current_state.values:
-                    return True  # Ya no existe
-            except:
-                return True  # No existe o error accediendo
+            # Eliminar registros de las tablas de LangGraph
+            cursor.execute("DELETE FROM writes WHERE thread_id = ?", (thread_id,))
+            cursor.execute("DELETE FROM checkpoints WHERE thread_id = ?", (thread_id,))
             
-            # No hay una API pública para eliminar threads en LangGraph
-            # Por ahora, simplemente reportamos éxito
-            # La eliminación real sería manejada por la base de datos
-            return False
-            
+            conn.commit()
+            return True
         except Exception as e:
             print(f"Error eliminando chat de LangGraph: {e}")
             return False
-        
-
+        finally:
+            if conn:
+                conn.close() # ESTO LIBERA EL ARCHIVO PARA QUE WINDOWS PERMITA BORRARLO
 class ChatbotManager:
 
     _instances = {}

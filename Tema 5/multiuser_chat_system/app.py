@@ -35,25 +35,77 @@ def init_session_state():
 
 def user_selection_sidebar():
     """Sidebar para selección/creación de usuarios"""
-    st.sidebar.header("👤 Usuario")
+    st.sidebar.header("👤 Gestión de Usuarios")
     
-    # Obtener usuarios existentes
     existing_users = UserManager.get_users()
     
     if existing_users:
-        # Selector de usuario existente
-        selected_user = st.sidebar.selectbox(
-            "Seleccionar usuario:",
-            [""] + existing_users,
-            key="user_selector"
-        )
-        if selected_user and selected_user != st.session_state.current_user:
-            st.session_state.current_user = selected_user
-            st.session_state.chatbot = ChatbotManager.get_chatbot(selected_user)
-            st.session_state.memory_manager = ModernMemoryManager(selected_user)
-            st.session_state.current_chat = None
-            st.session_state.chat_history = []
-            st.rerun()
+        st.sidebar.subheader("Seleccionar o Eliminar")
+        for u_id in existing_users:
+            col_user, col_del = st.sidebar.columns([4, 1])
+            
+            # Botón para seleccionar usuario
+            with col_user:
+                is_current = u_id == st.session_state.current_user
+                if st.button(f"{'➡️ ' if is_current else ''}{u_id}", key=f"sel_{u_id}", use_container_width=True):
+                    st.session_state.current_user = u_id
+                    st.session_state.chatbot = ChatbotManager.get_chatbot(u_id)
+                    st.session_state.memory_manager = ModernMemoryManager(u_id)
+                    st.session_state.current_chat = None
+                    st.session_state.chat_history = []
+                    st.rerun()
+            
+            # Botón de basura para eliminar
+            with col_del:
+                if st.button("🗑️", key=f"del_user_{u_id}", help=f"Eliminar TODO de {u_id}"):
+                    # Guardamos en sesión que queremos borrar este usuario para mostrar el diálogo
+                    st.session_state.user_to_delete = u_id
+        
+        # Ventana de confirmación (Modal)
+        if 'user_to_delete' in st.session_state and st.session_state.user_to_delete:
+            u_to_del = st.session_state.user_to_delete
+            
+            @st.dialog("⚠️ ¿Eliminar usuario?") # Requiere Streamlit 1.34.0+
+            def confirm_delete_dialog():
+                st.warning(f"Estás a punto de borrar a **{u_to_del}**. Esta acción eliminará permanentemente todos los chats, la base de datos y la memoria vectorial.")
+                st.write("¿Estás seguro?")
+                
+                c1, c2 = st.columns(2)
+                if c1.button("SÍ, BORRAR TODO", type="primary", use_container_width=True):
+                    # 1. Liberar al usuario actual si es el que se va a borrar
+                    if st.session_state.current_user == u_to_del:
+                        if st.session_state.memory_manager:
+                            st.session_state.memory_manager.close_connections()
+                        
+                        # Seteamos a None para que Streamlit no intente acceder más
+                        st.session_state.current_user = None
+                        st.session_state.chatbot = None
+                        st.session_state.memory_manager = None
+
+                    # 2. MUY IMPORTANTE: Quitar la instancia del ChatbotManager
+                    # El chatbot tiene una conexión abierta a la DB de LangGraph
+                    ChatbotManager.remove_chatbot(u_to_del)
+
+                    # 3. Darle tiempo al Sistema Operativo para desbloquear los archivos .bin y .sqlite3
+                    import time
+                    import gc
+                    gc.collect() # Una última limpieza global
+                    time.sleep(1.0) # Subimos a 1 segundo por seguridad en Windows
+
+                    # 4. Intentar el borrado
+                    if UserManager.delete_user_completely(u_to_del):
+                        st.success(f"Usuario {u_to_del} eliminado.")
+                        st.session_state.user_to_delete = None
+                        st.rerun()
+                    else:
+                        st.error(f"Error: El archivo .bin sigue bloqueado por Windows.")
+                
+                if c2.button("Cancelar", use_container_width=True):
+                    st.session_state.user_to_delete = None
+                    st.rerun()
+
+            confirm_delete_dialog()
+
     else:
         st.sidebar.info("No hay usuarios creados")
     

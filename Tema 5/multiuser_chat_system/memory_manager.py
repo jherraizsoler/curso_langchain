@@ -12,6 +12,9 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
+import shutil
+import gc
+import time
 
 from config import USERS_DIR, MAX_VECTOR_RESULTS, DEFAULT_MODEL
 
@@ -45,7 +48,6 @@ class ModernMemoryManager:
 
         # Ruta de la base de datos LangGraph
         self.langgraph_db_path = os.path.join(self.user_dir, "langgraph_memory.db")
-
 
     def _init_vector_db(self):
         """Inicializa la base de datos vectorial chromadb"""
@@ -178,7 +180,6 @@ Si no contiene información relevante para recordar, responde con categoría "no
                 chats_data.append(new_chat)
 
         self._save_chats_metadata(chats_data)
-
 
     def delete_chat(self, chat_id):
         """Elimina un chat de los metadatos."""
@@ -349,6 +350,34 @@ Título:""",
         
         return False
     
+    # === CERRAR CONEXIONES BORRAR USUARIO ===
+    def close_connections(self):
+        """Cierre ultra-agresivo para liberar archivos bloqueados por Chroma/SQLite."""
+        try:
+            # 1. Liberar el vectorstore de LangChain
+            if hasattr(self, 'vectorstore') and self.vectorstore:
+                # Accedemos al cliente interno si existe para forzar cierre
+                if hasattr(self.vectorstore, "_client"):
+                    self.vectorstore._client.clear_system_cache()
+                self.vectorstore = None
+            
+            # 2. Liberar el cliente de Chroma
+            if hasattr(self, 'client') and self.client:
+                try:
+                    self.client.clear_system_cache()
+                except:
+                    pass
+                self.client = None
+            
+            # 3. Forzar a Python a soltar los 'File Handles'
+            import gc
+            import time
+            gc.collect()
+            time.sleep(0.5) # Pausa para que el SO registre el cierre
+            
+            print("[+] Conexiones cerradas y memoria liberada.")
+        except Exception as e:
+            print(f"[-] Error en el cierre nuclear: {e}")
 
 class UserManager:
     """Gestor simplificado de usuarios"""
@@ -384,3 +413,28 @@ class UserManager:
         except Exception as e:
             print(f"Error creando usuario: {e}")
             return False
+
+    @staticmethod
+    def delete_user_completely(user_id):
+        import shutil, time, gc, os
+        from config import USERS_DIR
+        user_path = os.path.join(USERS_DIR, user_id)
+        
+        if not os.path.exists(user_path):
+            return True
+
+        for i in range(5):
+            try:
+                gc.collect()
+                # Pausa incremental más larga: 1s, 2s, 3s...
+                time.sleep(i + 1) 
+                
+                # Intentamos borrar
+                shutil.rmtree(user_path)
+                return True
+            except PermissionError:
+                print(f"[!] Archivo bloqueado por Windows (Intento {i+1}). Reintentando...")
+                # OPCIONAL: Si falla mucho, podrías intentar borrar archivo por archivo
+                # pero normalmente rmtree es lo mejor.
+                continue
+        return False
