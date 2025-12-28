@@ -22,4 +22,4 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
-Tema 6/credentials_agente_ia_google.json
+Tema 6/credentials.json
