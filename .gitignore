@@ -17,7 +17,9 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+
 # --- Distribución / Paquetes ---
 dist/
 build/
 *.egg-info/
+Tema 6/credentials_agente_ia_google.json
